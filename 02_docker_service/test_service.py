@@ -2,8 +2,8 @@ import json
 import sys
 import os
 
-# Add 2докер to sys.path
-sys.path.insert(0, os.path.abspath("2докер"))
+# Add directory containing this script to sys.path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from app import app, CallInput, ENGINE
 
@@ -32,4 +32,4 @@ for f in res.get("facts", []):
     q = f.get("source", {}).get("quote")
     if sp and q:
         assert sp[1] - sp[0] == len(q), f"Span mismatch: span={sp}, len(quote)={len(q)}"
-print("✅ All assertions passed successfully! Honest spans verified.")
+print("[OK] All assertions passed successfully! Honest spans verified.")

@@ -477,7 +477,7 @@ class FactExtractorEngine:
             self.model = base_model
             self.loaded_model_name = f"{target_model} ({self.device.upper()})"
         except Exception as e:
-            print(f"⚠️ Переключение на Point1_CPU_Fast (LLM не загружена: {e})")
+            print(f"[Warning] Переключение на Point1_CPU_Fast (LLM не загружена: {e})")
             self.model = None
 
     @staticmethod
@@ -1078,7 +1078,7 @@ HTML_DASHBOARD = """<!DOCTYPE html>
     <section class="mode-grid">
       <div class="mode-card" id="card-point1_cpu" onclick="selectMode('point1_cpu')">
         <div class="mode-header">
-          <span class="mode-name">⚡ Точка 1 · CPU Fast (Zero-GPU)</span>
+          <span class="mode-name"> Точка 1 · CPU Fast (Zero-GPU)</span>
           <span class="mode-tag">0M GPU · ~0.05s</span>
         </div>
         <div class="mode-desc">Детерминированный каталожный экстрактор + Калибровка v3.0</div>
@@ -1091,7 +1091,7 @@ HTML_DASHBOARD = """<!DOCTYPE html>
 
       <div class="mode-card active" id="card-point2_05b" onclick="selectMode('point2_05b')">
         <div class="mode-header">
-          <span class="mode-name">🚀 Точка 2 · Qwen2.5-0.5B + LoRA</span>
+          <span class="mode-name"> Точка 2 · Qwen2.5-0.5B + LoRA</span>
           <span class="mode-tag">490M · 1.25s</span>
         </div>
         <div class="mode-desc">Оптимальный баланс цены и качества (экономия GPU 8.5x)</div>
@@ -1104,7 +1104,7 @@ HTML_DASHBOARD = """<!DOCTYPE html>
 
       <div class="mode-card" id="card-point3_15b" onclick="selectMode('point3_15b')">
         <div class="mode-header">
-          <span class="mode-name">🏆 Точка 3 · Vikhr-1.5B SOTA</span>
+          <span class="mode-name"> Точка 3 · Vikhr-1.5B SOTA</span>
           <span class="mode-tag">1.54B · 3.80s</span>
         </div>
         <div class="mode-desc">Максимальная полнота извлечения (+5.91 п.п. Recall к LLM)</div>
@@ -1121,7 +1121,7 @@ HTML_DASHBOARD = """<!DOCTYPE html>
       <!-- Left: Input Transcript -->
       <div class="panel">
         <div class="panel-header">
-          <div class="panel-title">🎙️ Входной диалог техподдержки</div>
+          <div class="panel-title"> Входной диалог техподдержки</div>
           <div class="preset-group">
             <button class="btn-preset" onclick="loadPreset(0)">Кейс 1: Обрыв + Выезд</button>
             <button class="btn-preset" onclick="loadPreset(1)">Кейс 2: Смена тарифа</button>
@@ -1147,14 +1147,14 @@ HTML_DASHBOARD = """<!DOCTYPE html>
         <textarea id="turnsJsonInput" class="json-editor mono" oninput="renderTurnsPreview()"></textarea>
 
         <button id="extractBtn" class="btn-primary" onclick="runExtraction()">
-          <span>⚡ Извлечь и откалибровать факты</span>
+          <span> Извлечь и откалибровать факты</span>
         </button>
       </div>
 
       <!-- Right: Extracted Facts Output -->
       <div class="panel">
         <div class="panel-header">
-          <div class="panel-title">🎯 Извлечённые факты (case_metrics v2.1)</div>
+          <div class="panel-title"> Извлечённые факты (case_metrics v2.1)</div>
           <button class="toggle-btn mono" onclick="toggleRawJson()">{ } Показать Raw JSON</button>
         </div>
 
@@ -1243,7 +1243,7 @@ HTML_DASHBOARD = """<!DOCTYPE html>
         container.innerHTML = turns.map(t => `
           <div class="turn-bubble ${t.speaker === 'client' ? 'client' : 'operator'}">
             <div class="turn-meta">
-              <span>#${t.idx} · ${t.speaker === 'client' ? '👤 Клиент' : '🎧 Оператор'}</span>
+              <span>#${t.idx} · ${t.speaker === 'client' ? ' Клиент' : ' Оператор'}</span>
             </div>
             <div>${t.text}</div>
           </div>
@@ -1261,7 +1261,7 @@ HTML_DASHBOARD = """<!DOCTYPE html>
     async function runExtraction() {
       const btn = document.getElementById('extractBtn');
       btn.disabled = true;
-      btn.innerHTML = '<span>⏳ Извлечение и калибровка инвариантов...</span>';
+      btn.innerHTML = '<span> Извлечение и калибровка инвариантов...</span>';
 
       try {
         const turns = JSON.parse(document.getElementById('turnsJsonInput').value);
@@ -1311,7 +1311,7 @@ HTML_DASHBOARD = """<!DOCTYPE html>
         alert('Ошибка запроса: ' + err);
       } finally {
         btn.disabled = false;
-        btn.innerHTML = '<span>⚡ Извлечь и откалибровать факты</span>';
+        btn.innerHTML = '<span> Извлечь и откалибровать факты</span>';
       }
     }
 
@@ -1369,7 +1369,7 @@ def extract_batch_calls(
 
 if __name__ == "__main__":
     import uvicorn
-    print("🚀 Запуск сервера MTS MWS Fact Extraction на http://127.0.0.1:8000 ...")
-    print("🌐 Откройте в браузере Web UI: http://127.0.0.1:8000")
-    print("📖 Swagger UI документация: http://127.0.0.1:8000/docs")
+    print(" Запуск сервера MTS MWS Fact Extraction на http://127.0.0.1:8000 ...")
+    print(" Откройте в браузере Web UI: http://127.0.0.1:8000")
+    print(" Swagger UI документация: http://127.0.0.1:8000/docs")
     uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=False)

@@ -368,7 +368,7 @@ def run_inference(
     device: str = "auto",
     batch_size: int = 1
 ):
-    print(f"📖 Чтение входных диалогов: {input_jsonl}")
+    print(f" Чтение входных диалогов: {input_jsonl}")
     calls = []
     with open(input_jsonl, "r", encoding="utf-8") as f:
         for line in f:
@@ -379,15 +379,15 @@ def run_inference(
     if mode == "point1_cpu":
         device = "cpu"
         use_llm = False
-        print("⚡ Выбран режим: point1_cpu (Fast CPU / Zero-GPU)")
+        print(" Выбран режим: point1_cpu (Fast CPU / Zero-GPU)")
     elif mode == "point3_15b":
         model_id = "Vikhrmodels/Vikhr-Qwen-2.5-1.5B-Instruct"
         use_llm = True
-        print("🚀 Выбран режим: point3_15b (Vikhr 1.5B Instruct)")
+        print(" Выбран режим: point3_15b (Vikhr 1.5B Instruct)")
     elif mode == "point2_05b":
         model_id = "Qwen/Qwen2.5-0.5B-Instruct"
         use_llm = True
-        print("🎯 Выбран режим: point2_05b (Qwen 0.5B Instruct)")
+        print(" Выбран режим: point2_05b (Qwen 0.5B Instruct)")
     else:
         use_llm = (device != "cpu")
 
@@ -398,7 +398,7 @@ def run_inference(
             from transformers import AutoModelForCausalLM, AutoTokenizer
             from peft import PeftModel
 
-            print(f"🤖 Инициализация LLM: {model_id} (веса: {weights_path})")
+            print(f" Инициализация LLM: {model_id} (веса: {weights_path})")
             tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
             if tokenizer.pad_token is None:
                 tokenizer.pad_token = tokenizer.eos_token
@@ -411,12 +411,12 @@ def run_inference(
                 trust_remote_code=True
             )
             if weights_path and Path(weights_path).exists():
-                print(f"🧩 Загрузка LoRA адаптера: {weights_path}")
+                print(f" Загрузка LoRA адаптера: {weights_path}")
                 model = PeftModel.from_pretrained(model, weights_path)
             model.eval()
-            print("✅ LLM готова к инференсу.")
+            print("[OK] LLM готова к инференсу.")
         except Exception as e:
-            print(f"⚠️ Загрузка LLM не удалась ({e}). Автоматический переход в режим point1_cpu.")
+            print(f"[Warning] Загрузка LLM не удалась ({e}). Автоматический переход в режим point1_cpu.")
             use_llm = False
 
     t_start = time.time()
@@ -456,13 +456,13 @@ def run_inference(
 
     t_end = time.time()
     elapsed = t_end - t_start
-    print(f"⏱️ Инференс выполнен за {elapsed:.2f} сек ({elapsed/len(calls):.4f} сек/звонок)")
+    print(f" Инференс выполнен за {elapsed:.2f} сек ({elapsed/len(calls):.4f} сек/звонок)")
 
-    print(f"💾 Запись результатов инференса в: {output_jsonl}")
+    print(f" Запись результатов инференса в: {output_jsonl}")
     with open(output_jsonl, "w", encoding="utf-8") as f:
         for c in processed_calls:
             f.write(json.dumps(c, ensure_ascii=False) + "\n")
-    print(f"✅ Успешно обработано {len(processed_calls)} звонков!")
+    print(f"[OK] Успешно обработано {len(processed_calls)} звонков!")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Инференс модели извлечения фактов")

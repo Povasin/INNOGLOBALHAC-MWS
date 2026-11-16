@@ -38,7 +38,7 @@ def fix_all_seeds(seed: int = 42):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     hf_set_seed(seed)
-    print(f"🔒 Все генераторы случайных чисел зафиксированы: SEED = {seed}")
+    print(f" Все генераторы случайных чисел зафиксированы: SEED = {seed}")
 
 class SFTChatDataset(Dataset):
     """
@@ -78,7 +78,7 @@ class SFTChatDataset(Dataset):
                 "attention_mask": [1] * len(full_ids),
                 "labels": labels
             })
-        print(f"📖 Загружено {len(self.examples)} валидных обучающих примеров (длина до {max_len} токенов).")
+        print(f" Загружено {len(self.examples)} валидных обучающих примеров (длина до {max_len} токенов).")
 
     def __len__(self):
         return len(self.examples)
@@ -109,7 +109,7 @@ def train(args):
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"📦 Загрузка модели: {args.model_id}")
+    print(f" Загрузка модели: {args.model_id}")
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_quant_type="nf4",
@@ -144,7 +144,7 @@ def train(args):
     model = get_peft_model(model, peft_config)
     model.print_trainable_parameters()
 
-    print(f"📖 Загрузка обучающего датасета: {args.train_file}")
+    print(f" Загрузка обучающего датасета: {args.train_file}")
     train_dataset = SFTChatDataset(args.train_file, tokenizer, max_len=args.max_length)
     collate_fn = create_collate_fn(tokenizer)
 
@@ -174,11 +174,11 @@ def train(args):
         data_collator=collate_fn
     )
 
-    print("🚀 Старт обучения с точным маскированием промпта...")
+    print(" Старт обучения с точным маскированием промпта...")
     trainer.train()
 
     final_adapter_dir = out_dir / "final_adapter"
-    print(f"💾 Сохранение обученного LoRA адаптера в: {final_adapter_dir}")
+    print(f" Сохранение обученного LoRA адаптера в: {final_adapter_dir}")
     trainer.save_model(str(final_adapter_dir))
     tokenizer.save_pretrained(str(final_adapter_dir))
 
@@ -186,7 +186,7 @@ def train(args):
     config_dict = vars(args)
     with open(out_dir / "training_config.json", "w", encoding="utf-8") as f:
         json.dump(config_dict, f, indent=2, ensure_ascii=False)
-    print("✅ Обучение успешно завершено!")
+    print("[OK] Обучение успешно завершено!")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Обучение компактного экстрактора фактов с фиксированными сидами")
