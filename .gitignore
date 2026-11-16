@@ -1,0 +1,56 @@
+# Python & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+
+# Jupyter Notebook checkpoints & old scratch notebooks
+.ipynb_checkpoints/
+res_old_backup.ipynb
+resres.ipynb
+res.ipynb
+itog.ipynb
+CompactFact_Colab_Diagnostic.ipynb
+
+# Scratch & Temporary directories
+scratch/
+weight/
+.user_uploaded/
+.system_generated/
+FINAL_COMPLIANT_SUBMISSION/
+2докер/
+
+# Intermediate exploration predictions and scripts
+pred_h*.jsonl
+pred_raw.jsonl
+pred_knn_cpu.jsonl
+pred_ensemble_v21.jsonl
+postprocess_*.py
+inspect_values.py
+explore_data.py
+knn_hybrid_cpu.py
+
+# Large Datasets and Archives
+Данные/
+Данные_v1/
+*.zip
+!01_model_and_training.zip
+!compactfact_submission_bundle.zip
+train.jsonl
+train_sft.jsonl
+
+# Model weights binaries
+*.bin
+*.safetensors
+*.pt
+*.pth
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -1,0 +1,50 @@
+{
+  "Point1_CPU_Fast": {
+    "metrics_version": "2.1",
+    "n_calls": 383,
+    "n_gold_facts": 1845,
+    "n_pred_facts": 1995,
+    "fact_precision": 0.3624,
+    "fact_recall": 0.3919,
+    "temporal_recall": 0.4702,
+    "n_temporal": 453,
+    "state_accuracy": 0.5201,
+    "n_state": 623,
+    "grounding_turn": 0.7953,
+    "grounding_span": 1.0,
+    "n_grounded": 723,
+    "fact_f1": 0.3766
+  },
+  "Point2_GPU_Qwen05B": {
+    "metrics_version": "2.1",
+    "n_calls": 383,
+    "n_gold_facts": 1845,
+    "n_pred_facts": 2079,
+    "fact_precision": 0.3564,
+    "fact_recall": 0.4016,
+    "temporal_recall": 0.4708,
+    "n_temporal": 463,
+    "state_accuracy": 0.5201,
+    "n_state": 623,
+    "grounding_turn": 0.7841,
+    "grounding_span": 1.0,
+    "n_grounded": 741,
+    "fact_f1": 0.3777
+  },
+  "Point3_GPU_Vikhr15B": {
+    "metrics_version": "2.1",
+    "n_calls": 383,
+    "n_gold_facts": 1845,
+    "n_pred_facts": 2434,
+    "fact_precision": 0.3332,
+    "fact_recall": 0.4396,
+    "temporal_recall": 0.4627,
+    "n_temporal": 510,
+    "state_accuracy": 0.5329,
+    "n_state": 623,
+    "grounding_turn": 0.7756,
+    "grounding_span": 1.0,
+    "n_grounded": 811,
+    "fact_f1": 0.3791
+  }
+}
