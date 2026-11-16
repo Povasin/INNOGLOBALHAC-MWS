@@ -44,11 +44,13 @@ FINAL_COMPLIANT_SUBMISSION/
 Данные_v1/
 *.zip
 
-# Model weights binaries
+# Model weights binaries (ignore heavy base models, allow compact LoRA adapters)
 *.bin
 *.safetensors
 *.pt
 *.pth
+!01_model_and_training/weights/**
+!02_docker_service/weights/**
 
 # OS files
 .DS_Store

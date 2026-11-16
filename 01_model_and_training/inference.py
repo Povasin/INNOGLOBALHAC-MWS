@@ -17,9 +17,33 @@ import os
 import re
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from difflib import SequenceMatcher
 from pathlib import Path
+
+NEG_CUES = [
+    "не помогло", "толку ноль", "без результата", "все равно", "всё равно",
+    "не помог", "не помогает", "без толку", "не решило", "не изменилось", "так же"
+]
+
+def resolve_relative_date(text: str, started_at: str) -> str:
+    base_str = (started_at or "2026-01-01T00:00:00")[:10]
+    try:
+        base_dt = datetime.fromisoformat(base_str)
+    except ValueError:
+        return base_str + "T00:00:00"
+    t = _norm_w(text)
+    if "позавчера" in t:
+        return (base_dt - timedelta(days=2)).strftime("%Y-%m-%dT00:00:00")
+    if "вчера" in t:
+        return (base_dt - timedelta(days=1)).strftime("%Y-%m-%dT00:00:00")
+    if "завтра" in t:
+        return (base_dt + timedelta(days=1)).strftime("%Y-%m-%dT00:00:00")
+    if "в прошлом месяце" in t or "месяц назад" in t:
+        return (base_dt - timedelta(days=30)).strftime("%Y-%m-%dT00:00:00")
+    if "неделю назад" in t or "с прошлой недели" in t:
+        return (base_dt - timedelta(days=7)).strftime("%Y-%m-%dT00:00:00")
+    return base_dt.strftime("%Y-%m-%dT00:00:00")
 
 CURRENT_DIR = Path(__file__).resolve().parent
 ROOT_DIR = CURRENT_DIR.parent
@@ -200,87 +224,135 @@ def unpack_answer(text: str, call: dict) -> list[dict]:
     return facts
 
 def extract_facts_autonomous_cpu(call: dict, catalog: dict) -> list[dict]:
-    facts = []
+    turns = call.get("turns", [])
+    started_at = call.get("started_at", "2026-01-01T00:00:00")
     account_id = call.get("series", {}).get("account_id") if call.get("series") else None
     if not account_id:
         account_id = call["call_id"].split(":")[0] if ":" in call["call_id"] else "u_client"
-    started_at = call.get("started_at", "2026-05-11T09:00:00")
-    call_day = started_at[:10] if started_at else "2026-05-11"
-
+    
+    extracted = []
+    
     tariffs = catalog.get("tariffs", [])
     actions = catalog.get("actions", [])
     agreements = catalog.get("agreements", [])
     statuses = catalog.get("statuses", [])
     symptoms = catalog.get("symptoms", [])
 
-    turns = call.get("turns", [])
-    for t in turns:
-        idx = t.get("idx", 0)
-        speaker = t.get("speaker", "client")
-        txt = t.get("text", "")
-        txt_low = _norm_w(txt)
+    for turn in turns:
+        idx = turn.get("idx", 0)
+        speaker = turn.get("speaker", "client").lower()
+        text = turn.get("text", "")
+        t_low = _norm_w(text)
+        vf = resolve_relative_date(text, started_at)
 
-        for sym in symptoms:
-            if len(sym) >= 4 and _norm_w(sym) in txt_low:
-                sp, q = find_honest_span_in_turn(txt, sym, "домашний интернет")
-                facts.append({
-                    "object": {"id": f"{account_id}:svc0", "type": "service", "name": "домашний интернет"},
-                    "attribute": "service_state",
-                    "value": sym,
-                    "polarity": 1,
-                    "speaker": speaker,
-                    "valid_from": f"{call_day}T00:00:00",
-                    "valid_to": None,
-                    "source": {"turn_idx": idx, "span": sp, "quote": q}
-                })
-                break
+        # Определение базового объекта
+        obj_type, obj_name = "service", "домашний интернет"
+        if any(w in t_low for w in ["роутер", "модем", "приставк", "кабел", "сплиттер"]):
+            obj_type = "device"
+            if "роутер" in t_low: obj_name = "роутер"
+            elif "модем" in t_low: obj_name = "модем"
+            elif "сплиттер" in t_low: obj_name = "сплиттер"
+            else: obj_name = "приставка"
+        elif any(w in t_low for w in ["мобильн", "связь", "сим-карт", "номер"]):
+            obj_type = "service"
+            obj_name = "мобильная связь"
+        elif any(w in t_low for w in ["тв", "телевид", "канал"]):
+            obj_type = "service"
+            obj_name = "Цифровое ТВ"
 
-        for trf in tariffs:
-            if len(trf) >= 4 and _norm_w(trf) in txt_low:
-                sp, q = find_honest_span_in_turn(txt, trf, "мобильная связь")
-                facts.append({
-                    "object": {"id": f"{account_id}:svc1", "type": "service", "name": "мобильная связь"},
-                    "attribute": "tariff",
-                    "value": trf,
-                    "polarity": 1,
-                    "speaker": speaker,
-                    "valid_from": f"{call_day}T00:00:00",
-                    "valid_to": None,
-                    "source": {"turn_idx": idx, "span": sp, "quote": q}
-                })
-                break
-
+        # 1. Статусы заявок
         for st in statuses:
-            if len(st) >= 4 and _norm_w(st) in txt_low:
-                sp, q = find_honest_span_in_turn(txt, st, "заявка")
-                facts.append({
-                    "object": {"id": f"{account_id}:tick0", "type": "ticket", "name": "заявка на ремонт"},
+            if _norm_w(st) in t_low:
+                sp, q = find_honest_span_in_turn(text, st, "заявка")
+                extracted.append({
+                    "object": {"id": f"{account_id}:tick0", "type": "ticket", "name": "заявка"},
                     "attribute": "ticket_status",
                     "value": st,
                     "polarity": 1,
                     "speaker": speaker,
-                    "valid_from": f"{call_day}T12:00:00",
+                    "valid_from": vf,
                     "valid_to": None,
                     "source": {"turn_idx": idx, "span": sp, "quote": q}
                 })
-                break
 
-        for agr in agreements:
-            if len(agr) >= 5 and _norm_w(agr) in txt_low:
-                sp, q = find_honest_span_in_turn(txt, agr, "согласие")
-                facts.append({
+        # 2. Тарифы
+        for tar in tariffs:
+            if _norm_w(tar) in t_low and any(w in t_low for w in ["тариф", "переш", "подключ", "перейти", "план"]):
+                if speaker == "operator" and any(w in t_low for w in ["предлож", "можем", "хотите", "попробу"]):
+                    continue
+                is_old = any(w in t_low for w in ["был", "раньше", "до этого", "да нет", "прошл"])
+                sp, q = find_honest_span_in_turn(text, tar, "тариф")
+                extracted.append({
                     "object": {"id": f"{account_id}:client", "type": "client", "name": "клиент"},
-                    "attribute": "agreement",
-                    "value": agr,
+                    "attribute": "tariff",
+                    "value": tar,
                     "polarity": 1,
                     "speaker": speaker,
-                    "valid_from": f"{call_day}T00:00:00",
+                    "valid_from": vf,
+                    "valid_to": started_at[:10] + "T00:00:00" if is_old else None,
+                    "source": {"turn_idx": idx, "span": sp, "quote": q}
+                })
+
+        # 3. Действия клиента
+        if any(w in t_low for w in ["перезагруж", "переподключ", "сброс", "проверял", "заменил", "включал"]):
+            best_act = "перезагрузка роутера"
+            if "приставк" in t_low: best_act = "перезагрузка приставки"
+            elif "кабел" in t_low: best_act = "переподключение кабеля"
+            elif "сброс" in t_low: best_act = "сброс настроек"
+            elif "баланс" in t_low: best_act = "проверка баланса"
+            
+            if any(c in t_low for c in NEG_CUES):
+                best_act += " — не помогло"
+            sp, q = find_honest_span_in_turn(text, best_act.split(" —")[0], "действие")
+            extracted.append({
+                "object": {"id": f"{account_id}:client", "type": "client", "name": "клиент"},
+                "attribute": "action",
+                "value": best_act,
+                "polarity": 1,
+                "speaker": speaker,
+                "valid_from": vf,
+                "valid_to": None,
+                "source": {"turn_idx": idx, "span": sp, "quote": q}
+            })
+
+        # 4. Договоренности
+        if any(w in t_low for w in ["инженер", "выезд", "специалист", "мастер", "перерасчет", "перерасчёт"]):
+            if not (speaker == "operator" and any(w in t_low for w in ["можем", "предлагаю", "хотите"])):
+                val_agr = "выезд инженера" if any(w in t_low for w in ["инженер", "мастер", "выезд", "специалист"]) else "перерасчёт абонентской платы"
+                sp, q = find_honest_span_in_turn(text, val_agr, "договорённость")
+                extracted.append({
+                    "object": {"id": f"{account_id}:client", "type": "client", "name": "клиент"},
+                    "attribute": "agreement",
+                    "value": val_agr,
+                    "polarity": 1,
+                    "speaker": speaker,
+                    "valid_from": vf,
                     "valid_to": None,
                     "source": {"turn_idx": idx, "span": sp, "quote": q}
                 })
-                break
 
-    return facts
+        # 5. Состояние сервиса / симптомы
+        if any(w in t_low for w in ["не работа", "пропада", "обрыв", "низкая скорост", "красн", "зависа", "нет интернет", "слабый сигнал", "отвалива"]):
+            val_sym = "не работает"
+            if "обрыв" in t_low or "пропада" in t_low: val_sym = "периодические обрывы"
+            elif "скорост" in t_low: val_sym = "низкая скорость"
+            elif "красн" in t_low: val_sym = "горит красный индикатор"
+            elif "вай-фай" in t_low or "wifi" in t_low: val_sym = "не раздает вай-фай"
+            elif "зависа" in t_low: val_sym = "зависает картинка"
+            
+            sp, q = find_honest_span_in_turn(text, val_sym, obj_name)
+            extracted.append({
+                "object": {"id": f"{account_id}:{obj_name}", "type": obj_type, "name": obj_name},
+                "attribute": "service_state",
+                "value": val_sym,
+                "polarity": 1,
+                "speaker": speaker,
+                "valid_from": vf,
+                "valid_to": None,
+                "source": {"turn_idx": idx, "span": sp, "quote": q}
+            })
+
+    return extracted
 
 def apply_invariant_calibration_v30(call_data: dict, catalog: dict = None) -> dict:
     c = copy.deepcopy(call_data)
