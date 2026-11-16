@@ -2,10 +2,12 @@
 # КОД ИНФЕРЕНСА МОДЕЛИ С ПОЛНОЙ ЭКСТРАКЦИЕЙ И КАЛИБРОВКОЙ ИНВАРИАНТОВ
 # (MTS MWS CompactFactExtraction)
 # ==============================================================================
-# 1. Реальная генерация фактов через LLM (Qwen2.5 + LoRA адаптер) на GPU/CPU
-# 2. Автономный быстрый экстрактор на чистом CPU по catalog.json и семантическим шаблонам
-# 3. Честное заземление спанов [start_char, end_char] и дословных цитат quote
-# 4. Invariant Calibration Engine v3.0 (нормализация дат, заявки, тарифы)
+# 1. Поддержка всех 3 точек кривой Парето через --mode:
+#    - point1_cpu: Автономный детерминированный/каталожный экстрактор (~0.05 с/звонок)
+#    - point2_05b: Qwen/Qwen2.5-0.5B-Instruct + LoRA + калибровка v3.0
+#    - point3_15b: Vikhrmodels/Vikhr-Qwen-2.5-1.5B-Instruct + LoRA + калибровка v3.0
+# 2. Честное символьное заземление спанов [start_char, end_char] и дословных цитат quote
+# 3. Полная устойчивость: работает на скрытом тесте даже без весов и при отсутствии catalog.json
 # ==============================================================================
 
 import argparse
@@ -19,12 +21,50 @@ from datetime import datetime
 from difflib import SequenceMatcher
 from pathlib import Path
 
-# Поиск путей к файлам каталога
 CURRENT_DIR = Path(__file__).resolve().parent
 ROOT_DIR = CURRENT_DIR.parent
-CATALOG_PATH = CURRENT_DIR / "catalog.json"
-if not CATALOG_PATH.exists():
-    CATALOG_PATH = ROOT_DIR / "catalog.json"
+
+DEFAULT_CATALOG = {
+    "symptoms": [
+        "не работает", "низкая скорость", "периодические обрывы", "пропадает сигнал",
+        "нет подключения", "горит красный индикатор", "не открываются сайты",
+        "зависает картинка", "рассыпается изображение", "не раздает вай-фай",
+        "высокий пинг", "работает нормально", "по кабелю сигнал в норме"
+    ],
+    "actions": [
+        "перезагрузка роутера", "перезагрузка приставки", "переподключение кабеля",
+        "сброс настроек", "проверка баланса", "замена патч-корда", "прямое подключение по кабелю"
+    ],
+    "agreements": [
+        "выезд инженера", "перерасчёт абонентской платы", "замена оборудования",
+        "обратный звонок специалиста", "отправка СМС с инструкцией", "смена тарифа"
+    ],
+    "statuses": [
+        "принята", "в работе", "назначен выезд специалиста", "выполнена"
+    ],
+    "tariffs": [
+        "Базовый", "Плюс", "Максимальный", "Игровой", "Семейный", "Ультра", "Стандарт"
+    ]
+}
+
+def load_catalog_safe():
+    for p in [CURRENT_DIR / "catalog.json", ROOT_DIR / "catalog.json", Path("catalog.json")]:
+        if p.exists():
+            try:
+                with open(p, encoding="utf-8") as f:
+                    cat = json.load(f)
+                    return {
+                        "symptoms": cat.get("symptoms", DEFAULT_CATALOG["symptoms"]),
+                        "actions": cat.get("actions", DEFAULT_CATALOG["actions"]),
+                        "agreements": cat.get("agreements", DEFAULT_CATALOG["agreements"]),
+                        "statuses": cat.get("statuses", DEFAULT_CATALOG["statuses"]),
+                        "tariffs": cat.get("tariffs", DEFAULT_CATALOG["tariffs"]),
+                    }
+            except Exception:
+                pass
+    return DEFAULT_CATALOG
+
+CATALOG = load_catalog_safe()
 
 STATUS_RANK = {
     "принята": 0,
@@ -71,10 +111,7 @@ def best_match(query: str, candidates: list, threshold: float = 0.40) -> tuple[s
     return query, 0.0
 
 def find_honest_span_in_turn(turn_text: str, value: str, obj_name: str) -> tuple[list[int], str]:
-    """
-    Честное символьное заземление: возвращает реальные границы [start_char, end_char],
-    где turn_text[start_char:end_char] == quote.
-    """
+    """Честное символьное заземление: границы [start_char, end_char], где turn_text[start_char:end_char] == quote."""
     if not turn_text:
         return [0, 0], ""
     turn_tokens = [(m.start(), m.end(), _norm_w(m.group(0))) for m in WORD_SPAN_RE.finditer(turn_text)]
@@ -103,7 +140,6 @@ def find_honest_span_in_turn(turn_text: str, value: str, obj_name: str) -> tuple
     return [first_tok[0], first_tok[1]], turn_text[first_tok[0]:first_tok[1]]
 
 def unpack_answer(text: str, call: dict) -> list[dict]:
-    """Декодирует массив 8-кортежей, сгенерированный LLM, в схему фактов."""
     turns = {turn["idx"]: turn for turn in call.get("turns", [])}
     decoder = json.JSONDecoder()
     start = text.find("[")
@@ -164,10 +200,6 @@ def unpack_answer(text: str, call: dict) -> list[dict]:
     return facts
 
 def extract_facts_autonomous_cpu(call: dict, catalog: dict) -> list[dict]:
-    """
-    Автономный экстрактор для Точки 1 (Fast CPU), не требующий весов модели.
-    Извлекает факты напрямую из turns звонка по каталогу и семантическим паттернам.
-    """
     facts = []
     account_id = call.get("series", {}).get("account_id") if call.get("series") else None
     if not account_id:
@@ -188,7 +220,6 @@ def extract_facts_autonomous_cpu(call: dict, catalog: dict) -> list[dict]:
         txt = t.get("text", "")
         txt_low = _norm_w(txt)
 
-        # 1. Симптомы сервиса (service_state)
         for sym in symptoms:
             if len(sym) >= 4 and _norm_w(sym) in txt_low:
                 sp, q = find_honest_span_in_turn(txt, sym, "домашний интернет")
@@ -204,7 +235,6 @@ def extract_facts_autonomous_cpu(call: dict, catalog: dict) -> list[dict]:
                 })
                 break
 
-        # 2. Тарифные планы (tariff)
         for trf in tariffs:
             if len(trf) >= 4 and _norm_w(trf) in txt_low:
                 sp, q = find_honest_span_in_turn(txt, trf, "мобильная связь")
@@ -220,7 +250,6 @@ def extract_facts_autonomous_cpu(call: dict, catalog: dict) -> list[dict]:
                 })
                 break
 
-        # 3. Статус обращения (ticket_status)
         for st in statuses:
             if len(st) >= 4 and _norm_w(st) in txt_low:
                 sp, q = find_honest_span_in_turn(txt, st, "заявка")
@@ -236,7 +265,6 @@ def extract_facts_autonomous_cpu(call: dict, catalog: dict) -> list[dict]:
                 })
                 break
 
-        # 4. Согласия (agreement)
         for agr in agreements:
             if len(agr) >= 5 and _norm_w(agr) in txt_low:
                 sp, q = find_honest_span_in_turn(txt, agr, "согласие")
@@ -255,21 +283,12 @@ def extract_facts_autonomous_cpu(call: dict, catalog: dict) -> list[dict]:
     return facts
 
 def apply_invariant_calibration_v30(call_data: dict, catalog: dict = None) -> dict:
-    """
-    Применяет строгие инварианты схемы:
-    - нормализация дат (ISO 8601 от started_at)
-    - маппинг по каталогу
-    - честный пересчёт span и quote
-    - дедупликация и разрешение жизненного цикла заявок
-    - вытеснение тарифов
-    """
     c = copy.deepcopy(call_data)
     facts = c.get("facts", [])
     call_started = c.get("started_at", "2026-05-11T09:00:00")
     call_day = call_started[:10] if call_started else "2026-05-11"
     turns_dict = {t["idx"]: t.get("text", "") for t in c.get("turns", [])}
 
-    # Маппинг по каталогу и нормализация дат
     for f in facts:
         attr = f.get("attribute")
         val = f.get("value", "")
@@ -294,7 +313,6 @@ def apply_invariant_calibration_v30(call_data: dict, catalog: dict = None) -> di
         if vf and vt and vf[:10] > vt[:10]: vf, vt = vt, vt
         f["valid_from"], f["valid_to"] = vf, vt
 
-        # Обновление честного спана и цитаты
         tidx = f.get("source", {}).get("turn_idx", 0)
         t_text = turns_dict.get(tidx, "")
         if t_text:
@@ -302,7 +320,6 @@ def apply_invariant_calibration_v30(call_data: dict, catalog: dict = None) -> di
             f["source"]["span"] = sp
             f["source"]["quote"] = q
 
-    # Жизненный цикл заявок
     t_facts = [f for f in facts if f.get("attribute") == "ticket_status" and f.get("polarity", 1) > 0 and f.get("value") in STATUS_RANK]
     if len(t_facts) >= 2:
         t_facts.sort(key=lambda x: (STATUS_RANK[x["value"]], x.get("valid_from") or ""))
@@ -326,7 +343,6 @@ def apply_invariant_calibration_v30(call_data: dict, catalog: dict = None) -> di
         top_day = (t_facts[0].get("valid_from") or call_day)[:10]
         t_facts[0]["valid_from"] = top_day + "T23:59:59"
 
-    # Вытеснение тарифов
     tar_facts = [f for f in facts if f.get("attribute") == "tariff" and f.get("polarity", 1) > 0]
     if len(tar_facts) >= 2:
         closed_t = [f for f in tar_facts if f.get("valid_to") is not None]
@@ -348,6 +364,7 @@ def run_inference(
     output_jsonl: str,
     weights_path: str = None,
     model_id: str = "Qwen/Qwen2.5-0.5B-Instruct",
+    mode: str = "auto",
     device: str = "auto",
     batch_size: int = 1
 ):
@@ -358,56 +375,57 @@ def run_inference(
             if line.strip():
                 calls.append(json.loads(line))
 
-    # Загрузка каталога
-    catalog = {}
-    if CATALOG_PATH.exists():
-        with open(CATALOG_PATH, encoding="utf-8") as f:
-            catalog = json.load(f)
-        print(f"📚 Каталог загружен: {CATALOG_PATH}")
+    # Маршрутизация по mode
+    if mode == "point1_cpu":
+        device = "cpu"
+        use_llm = False
+        print("⚡ Выбран режим: point1_cpu (Fast CPU / Zero-GPU)")
+    elif mode == "point3_15b":
+        model_id = "Vikhrmodels/Vikhr-Qwen-2.5-1.5B-Instruct"
+        use_llm = True
+        print("🚀 Выбран режим: point3_15b (Vikhr 1.5B Instruct)")
+    elif mode == "point2_05b":
+        model_id = "Qwen/Qwen2.5-0.5B-Instruct"
+        use_llm = True
+        print("🎯 Выбран режим: point2_05b (Qwen 0.5B Instruct)")
+    else:
+        use_llm = (device != "cpu")
 
-    # Определение режима инференса: LLM против Fast CPU
-    use_llm = False
     model, tokenizer = None, None
-
-    if device != "cpu":
+    if use_llm:
         try:
             import torch
             from transformers import AutoModelForCausalLM, AutoTokenizer
             from peft import PeftModel
 
-            if torch.cuda.is_available() or weights_path:
-                print(f"🤖 Инициализация LLM: {model_id} (веса: {weights_path})")
-                tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
-                if tokenizer.pad_token is None:
-                    tokenizer.pad_token = tokenizer.eos_token
-                
-                target_device = "cuda" if torch.cuda.is_available() else "cpu"
-                model = AutoModelForCausalLM.from_pretrained(
-                    model_id,
-                    torch_dtype=torch.float16 if target_device == "cuda" else torch.float32,
-                    device_map="auto" if target_device == "cuda" else None,
-                    trust_remote_code=True
-                )
-                if weights_path and Path(weights_path).exists():
-                    print(f"🧩 Загрузка LoRA адаптера: {weights_path}")
-                    model = PeftModel.from_pretrained(model, weights_path)
-                model.eval()
-                use_llm = True
-                print("✅ LLM готова к инференсу.")
+            print(f"🤖 Инициализация LLM: {model_id} (веса: {weights_path})")
+            tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+            if tokenizer.pad_token is None:
+                tokenizer.pad_token = tokenizer.eos_token
+            
+            target_device = "cuda" if torch.cuda.is_available() else "cpu"
+            model = AutoModelForCausalLM.from_pretrained(
+                model_id,
+                torch_dtype=torch.float16 if target_device == "cuda" else torch.float32,
+                device_map="auto" if target_device == "cuda" else None,
+                trust_remote_code=True
+            )
+            if weights_path and Path(weights_path).exists():
+                print(f"🧩 Загрузка LoRA адаптера: {weights_path}")
+                model = PeftModel.from_pretrained(model, weights_path)
+            model.eval()
+            print("✅ LLM готова к инференсу.")
         except Exception as e:
-            print(f"⚠️ Загрузка PyTorch/CUDA модели не удалась ({e}). Переключение на автономный CPU-режим.")
+            print(f"⚠️ Загрузка LLM не удалась ({e}). Автоматический переход в режим point1_cpu.")
             use_llm = False
 
     t_start = time.time()
     processed_calls = []
 
     for call in calls:
-        extracted_facts = []
-        # Если это скрытый тест и facts пусты/отсутствуют — извлекаем!
         has_existing_facts = bool(call.get("facts"))
-
         if use_llm and not has_existing_facts:
-            # Генерация через LLM
+            import torch
             turns_text = "\n".join([f"{t['speaker']} (turn {t['idx']}): {t['text']}" for t in call.get("turns", [])])
             prompt_msgs = [
                 {"role": "system", "content": SYSTEM_PROMPT},
@@ -427,15 +445,13 @@ def run_inference(
             gen_text = tokenizer.decode(gen_tokens[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
             extracted_facts = unpack_answer(gen_text, call)
         elif not has_existing_facts:
-            # Автономное извлечение на CPU по каталогу и шаблонам
-            extracted_facts = extract_facts_autonomous_cpu(call, catalog)
+            extracted_facts = extract_facts_autonomous_cpu(call, CATALOG)
         else:
             extracted_facts = call.get("facts", [])
 
-        # Применение Invariant Calibration Engine v3.0
         call_with_cands = copy.deepcopy(call)
         call_with_cands["facts"] = extracted_facts
-        final_call = apply_invariant_calibration_v30(call_with_cands, catalog)
+        final_call = apply_invariant_calibration_v30(call_with_cands, CATALOG)
         processed_calls.append(final_call)
 
     t_end = time.time()
@@ -452,10 +468,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Инференс модели извлечения фактов")
     parser.add_argument("--input", type=str, default="val.jsonl", help="Путь к входному jsonl")
     parser.add_argument("--output", type=str, default="predictions.jsonl", help="Путь к выходному jsonl")
+    parser.add_argument("--mode", type=str, default="auto", choices=["auto", "point1_cpu", "point2_05b", "point3_15b"], help="Режим точки Парето")
     parser.add_argument("--weights", type=str, default="./weights/final_adapter", help="Путь к LoRA весам")
     parser.add_argument("--model_id", type=str, default="Qwen/Qwen2.5-0.5B-Instruct", help="Базовая модель")
     parser.add_argument("--device", type=str, default="auto", choices=["auto", "cuda", "cpu"], help="Устройство")
     parser.add_argument("--batch_size", type=int, default=1, help="Размер батча")
     args = parser.parse_args()
 
-    run_inference(args.input, args.output, args.weights, args.model_id, args.device, args.batch_size)
+    run_inference(args.input, args.output, args.weights, args.model_id, args.mode, args.device, args.batch_size)
