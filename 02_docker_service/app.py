@@ -1343,6 +1343,7 @@ def health_check():
     }
 
 @app.post("/extract")
+@app.post("/extract_facts")
 def extract_single_call(
     call: CallInput,
     mode: str = Query(default="point2_05b", description="Режим кривой: point1_cpu | point2_05b | point3_15b")
@@ -1354,6 +1355,7 @@ def extract_single_call(
     return result
 
 @app.post("/extract_batch")
+@app.post("/extract_facts_batch")
 def extract_batch_calls(
     batch: BatchCallInput,
     mode: str = Query(default="point2_05b", description="Режим кривой: point1_cpu | point2_05b | point3_15b")
