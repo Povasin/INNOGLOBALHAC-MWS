@@ -1365,3 +1365,11 @@ def extract_batch_calls(
         "total_latency_sec": round(time.perf_counter() - t0, 4),
         "results": results
     }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    print("🚀 Запуск сервера MTS MWS Fact Extraction на http://127.0.0.1:8000 ...")
+    print("🌐 Откройте в браузере Web UI: http://127.0.0.1:8000")
+    print("📖 Swagger UI документация: http://127.0.0.1:8000/docs")
+    uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=False)
