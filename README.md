@@ -37,7 +37,7 @@
 | [`02_docker_service/`](02_docker_service/) | **Пункт 2** | Готовый Docker-образ с FastAPI сервисом (`app.py`), интерактивным веб-дашбордом на `/`, healthcheck и автоматическими тестами |
 | [`03_report_and_benchmarks/`](03_report_and_benchmarks/) | **Пункт 3** | Итоговый PDF-отчёт (`Технический отчёт.pdf`), замеры времени/памяти на CPU и GPU, кривая Парето и глубокий анализ ошибок |
 | [`04_docs_and_deployment/`](04_docs_and_deployment/) | **Пункт 4** | Архитектурная документация (`architecture.md`) и пошаговые руководства по развёртыванию (`deployment_guide.md`) |
-| [`05_presentation/`](05_presentation/) | **Пункт 5** | Финальная презентация решения (`VIRA_защита.pptx`) и структурированный конспект выступления (`speaker_notes.md`) |
+| [`05_presentation/`](05_presentation/) | **Пункт 5** | Финальная презентация решения (`VIRA_защита.pptx`) |
 
 ```text
 .
@@ -71,7 +71,7 @@
 ├── 05_presentation/              # Пункт 5: Презентация и материалы к защите
 │   ├── VIRA_защита.pptx          # Итоговая презентация команды VIRA
 │   ├── CompactFact_MWS_Final_Presentation.pptx # Презентация архитектуры и замеров
-│   └── speaker_notes.md          # Структурированный конспект выступления для спикера
+│   └── README.md                 # Описание материалов к защите
 ├── .gitignore                    # Исключения Git
 ├── requirements.txt              # Корневые зависимости проекта
 └── README.md                     # Главная страница документации
