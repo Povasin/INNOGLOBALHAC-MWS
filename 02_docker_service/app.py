@@ -155,13 +155,12 @@ def clean_value(s: str) -> str:
     return s.strip()
 
 def find_best_span_in_turn(turn_text: str, value: str, obj_name: str):
-    """Честное символьное заземление: границы [start_char, end_char], где turn_text[start_char:end_char] == quote."""
+    """Символьное заземление спана и цитаты в реплике."""
     if not turn_text:
         return [0, 0], ""
     turn_tokens = [(m.start(), m.end(), _norm_w(m.group(0))) for m in WORD_SPAN_RE.finditer(turn_text)]
     if not turn_tokens:
-        l = min(30, len(turn_text))
-        return [0, l], turn_text[:l]
+        return [0, len(turn_text)], turn_text
     query_words = [
         _norm_w(m.group(0))
         for m in WORD_SPAN_RE.finditer(f"{value} {obj_name}")
@@ -564,14 +563,774 @@ class FactExtractorEngine:
 ENGINE = FactExtractorEngine()
 
 # ------------------------------------------------------------------------------
-# 5. FASTAPI ПРИЛОЖЕНИЕ И ЭНДПОИНТЫ
+# 5. FASTAPI ПРИЛОЖЕНИЕ, КАСТОМНЫЙ WEB-ИНТЕРФЕЙС (MWS DARK UI) И ЭНДПОИНТЫ
 # ------------------------------------------------------------------------------
+from fastapi.responses import HTMLResponse
+
+HTML_DASHBOARD = """<!DOCTYPE html>
+<html lang="ru" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MTS MWS · CompactFactExtraction Studio v3.0</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-main: #090b10;
+      --bg-card: rgba(18, 22, 31, 0.85);
+      --bg-card-hover: rgba(26, 32, 44, 0.95);
+      --bg-input: #0d1017;
+      --border: rgba(255, 255, 255, 0.08);
+      --border-focus: rgba(227, 6, 17, 0.55);
+      --mts-red: #E30611;
+      --mts-red-glow: rgba(227, 6, 17, 0.25);
+      --text-primary: #F3F4F6;
+      --text-secondary: #9CA3AF;
+      --text-muted: #6B7280;
+      --emerald: #10B981;
+      --amber: #F59E0B;
+      --blue: #3B82F6;
+      --purple: #8B5CF6;
+      --rose: #F43F5E;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg-main);
+      background-image:
+        radial-gradient(circle at 12% 8%, rgba(227, 6, 17, 0.14), transparent 32%),
+        radial-gradient(circle at 88% 15%, rgba(59, 130, 246, 0.10), transparent 35%);
+      color: var(--text-primary);
+      min-height: 100vh;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+    code, pre, .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 24px 28px 48px;
+    }
+    /* Header */
+    .navbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 22px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .brand-logo {
+      width: 42px;
+      height: 42px;
+      border-radius: 11px;
+      background: linear-gradient(135deg, #E30611 0%, #990008 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 15px;
+      letter-spacing: -0.5px;
+      color: #fff;
+      box-shadow: 0 6px 20px var(--mts-red-glow);
+    }
+    .brand-title {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .badge-version {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(227, 6, 17, 0.15);
+      color: #ff4d57;
+      border: 1px solid rgba(227, 6, 17, 0.35);
+    }
+    .brand-sub {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 14px;
+      border-radius: 999px;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      font-size: 12px;
+      font-weight: 600;
+      color: #34D399;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10B981;
+      box-shadow: 0 0 8px #10B981;
+    }
+    .nav-link {
+      text-decoration: none;
+      color: var(--text-secondary);
+      font-size: 13px;
+      font-weight: 500;
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      transition: all 0.18s ease;
+    }
+    .nav-link:hover {
+      color: #fff;
+      border-color: rgba(255,255,255,0.2);
+      background: var(--bg-card-hover);
+    }
+
+    /* Pareto Mode Selector */
+    .mode-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .mode-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px 18px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .mode-card:hover {
+      border-color: rgba(255, 255, 255, 0.2);
+      transform: translateY(-1px);
+    }
+    .mode-card.active {
+      border-color: var(--mts-red);
+      background: linear-gradient(180deg, rgba(227, 6, 17, 0.12) 0%, rgba(18, 22, 31, 0.92) 100%);
+      box-shadow: 0 8px 25px rgba(227, 6, 17, 0.15);
+    }
+    .mode-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .mode-name {
+      font-weight: 700;
+      font-size: 14px;
+      color: #fff;
+    }
+    .mode-tag {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.07);
+      color: var(--text-secondary);
+    }
+    .mode-card.active .mode-tag {
+      background: var(--mts-red);
+      color: #fff;
+    }
+    .mode-desc {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 10px;
+    }
+    .mode-metrics {
+      display: flex;
+      gap: 12px;
+      font-size: 11.5px;
+      color: #D1D5DB;
+    }
+    .mode-metrics span strong {
+      color: #10B981;
+    }
+
+    /* Main Workspace Layout */
+    .workspace {
+      display: grid;
+      grid-template-columns: 1fr 1.15fr;
+      gap: 24px;
+      align-items: start;
+    }
+    @media (max-width: 1024px) {
+      .mode-grid, .workspace { grid-template-columns: 1fr; }
+    }
+    .panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px 22px;
+      backdrop-filter: blur(12px);
+    }
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .panel-title {
+      font-size: 15px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .preset-group {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .btn-preset {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      padding: 5px 10px;
+      border-radius: 7px;
+      font-size: 11.5px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-preset:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+    .meta-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .field-label {
+      display: block;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 5px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .input-box {
+      width: 100%;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 9px 12px;
+      border-radius: 9px;
+      font-size: 13px;
+      outline: none;
+      transition: border 0.15s;
+    }
+    .input-box:focus {
+      border-color: var(--mts-red);
+    }
+    /* Dialogue Preview + JSON Toggle */
+    .turns-preview {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 290px;
+      overflow-y: auto;
+      padding: 12px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 11px;
+      margin-bottom: 14px;
+    }
+    .turn-bubble {
+      padding: 9px 12px;
+      border-radius: 9px;
+      font-size: 13px;
+      border-left: 3px solid transparent;
+      background: rgba(255, 255, 255, 0.03);
+    }
+    .turn-bubble.client {
+      border-left-color: #E30611;
+      background: rgba(227, 6, 17, 0.06);
+    }
+    .turn-bubble.operator {
+      border-left-color: #3B82F6;
+      background: rgba(59, 130, 246, 0.06);
+    }
+    .turn-meta {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      margin-bottom: 3px;
+      display: flex;
+      justify-content: space-between;
+      color: var(--text-secondary);
+    }
+    textarea.json-editor {
+      width: 100%;
+      height: 170px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      color: #A7F3D0;
+      padding: 12px;
+      border-radius: 10px;
+      font-size: 12px;
+      resize: vertical;
+      outline: none;
+      margin-bottom: 14px;
+    }
+    textarea.json-editor:focus {
+      border-color: var(--mts-red);
+    }
+    .btn-primary {
+      width: 100%;
+      background: linear-gradient(135deg, #E30611 0%, #B80009 100%);
+      color: #fff;
+      border: none;
+      padding: 13px 20px;
+      border-radius: 11px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      box-shadow: 0 6px 20px var(--mts-red-glow);
+      transition: all 0.2s ease;
+    }
+    .btn-primary:hover {
+      filter: brightness(1.1);
+      transform: translateY(-1px);
+    }
+    .btn-primary:disabled {
+      opacity: 0.6;
+      cursor: wait;
+    }
+
+    /* KPI Strip */
+    .kpi-strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .kpi-box {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+    .kpi-label {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-bottom: 2px;
+    }
+    .kpi-val {
+      font-size: 16px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .kpi-val.emerald { color: #34D399; }
+
+    /* Fact Cards */
+    .facts-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      max-height: 520px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    .fact-card {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+      transition: border 0.15s;
+    }
+    .fact-card:hover {
+      border-color: rgba(255, 255, 255, 0.22);
+    }
+    .fact-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+    .attr-badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 9px;
+      border-radius: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .attr-service_state { background: rgba(244, 63, 94, 0.15); color: #FB7185; border: 1px solid rgba(244, 63, 94, 0.35); }
+    .attr-action { background: rgba(245, 158, 11, 0.15); color: #FBBF24; border: 1px solid rgba(245, 158, 11, 0.35); }
+    .attr-agreement { background: rgba(16, 185, 129, 0.15); color: #34D399; border: 1px solid rgba(16, 185, 129, 0.35); }
+    .attr-ticket_status { background: rgba(139, 92, 246, 0.15); color: #A78BFA; border: 1px solid rgba(139, 92, 246, 0.35); }
+    .attr-tariff { background: rgba(59, 130, 246, 0.15); color: #60A5FA; border: 1px solid rgba(59, 130, 246, 0.35); }
+
+    .obj-pill {
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+    .fact-val {
+      font-size: 15px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 10px;
+    }
+    .fact-dates {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      font-size: 11.5px;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+      padding: 6px 10px;
+      background: rgba(255, 255, 255, 0.025);
+      border-radius: 7px;
+    }
+    .fact-quote {
+      font-size: 12px;
+      color: #D1D5DB;
+      border-left: 2px solid var(--mts-red);
+      padding-left: 10px;
+      font-style: italic;
+    }
+    .raw-json-out {
+      margin-top: 14px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      font-size: 11.5px;
+      color: #93C5FD;
+      max-height: 200px;
+      overflow-y: auto;
+      display: none;
+    }
+    .toggle-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      font-size: 11.5px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .toggle-btn:hover { color: #fff; border-color: rgba(255,255,255,0.25); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Top Navbar -->
+    <header class="navbar">
+      <div class="brand">
+        <div class="brand-logo">MWS</div>
+        <div>
+          <div class="brand-title">
+            CompactFactExtraction Studio
+            <span class="badge-version">Calibration Engine v3.0</span>
+          </div>
+          <div class="brand-sub">Компактные модели извлечения темпоральных фактов из транскриптов техподдержки · Innopolis Global Hack 2026</div>
+        </div>
+      </div>
+      <div class="nav-actions">
+        <div class="status-pill">
+          <span class="status-dot"></span>
+          <span id="engineStatusText">Engine Ready · Schema v2.1</span>
+        </div>
+        <a href="/docs" target="_blank" class="nav-link">Swagger API (/docs) ↗</a>
+      </div>
+    </header>
+
+    <!-- 3 Points Pareto Selector -->
+    <section class="mode-grid">
+      <div class="mode-card" id="card-point1_cpu" onclick="selectMode('point1_cpu')">
+        <div class="mode-header">
+          <span class="mode-name">⚡ Точка 1 · CPU Fast (Zero-GPU)</span>
+          <span class="mode-tag">0M GPU · ~0.05s</span>
+        </div>
+        <div class="mode-desc">Детерминированный каталожный экстрактор + Калибровка v3.0</div>
+        <div class="mode-metrics mono">
+          <span>F1: <strong>0.3766</strong></span>
+          <span>TempRec: <strong>0.4702</strong></span>
+          <span>GrSpan: <strong>1.0000</strong></span>
+        </div>
+      </div>
+
+      <div class="mode-card active" id="card-point2_05b" onclick="selectMode('point2_05b')">
+        <div class="mode-header">
+          <span class="mode-name">🚀 Точка 2 · Qwen2.5-0.5B + LoRA</span>
+          <span class="mode-tag">490M · 1.25s</span>
+        </div>
+        <div class="mode-desc">Оптимальный баланс цены и качества (экономия GPU 8.5x)</div>
+        <div class="mode-metrics mono">
+          <span>F1: <strong>0.3777</strong></span>
+          <span>TempRec: <strong>0.4708</strong></span>
+          <span>GrSpan: <strong>1.0000</strong></span>
+        </div>
+      </div>
+
+      <div class="mode-card" id="card-point3_15b" onclick="selectMode('point3_15b')">
+        <div class="mode-header">
+          <span class="mode-name">🏆 Точка 3 · Vikhr-1.5B SOTA</span>
+          <span class="mode-tag">1.54B · 3.80s</span>
+        </div>
+        <div class="mode-desc">Максимальная полнота извлечения (+5.91 п.п. Recall к LLM)</div>
+        <div class="mode-metrics mono">
+          <span>F1: <strong>0.3791</strong></span>
+          <span>Recall: <strong>0.4396</strong></span>
+          <span>StateAcc: <strong>0.5329</strong></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main Two-Column Workspace -->
+    <main class="workspace">
+      <!-- Left: Input Transcript -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">🎙️ Входной диалог техподдержки</div>
+          <div class="preset-group">
+            <button class="btn-preset" onclick="loadPreset(0)">Кейс 1: Обрыв + Выезд</button>
+            <button class="btn-preset" onclick="loadPreset(1)">Кейс 2: Смена тарифа</button>
+            <button class="btn-preset" onclick="loadPreset(2)">Кейс 3: Цепочка статусов</button>
+          </div>
+        </div>
+
+        <div class="meta-row">
+          <div>
+            <label class="field-label">ID Звонка (call_id)</label>
+            <input id="callIdInput" class="input-box mono" value="call_mws_demo_01" />
+          </div>
+          <div>
+            <label class="field-label">Дата и время начала (started_at)</label>
+            <input id="startedAtInput" class="input-box mono" value="2026-11-15T14:30:00" />
+          </div>
+        </div>
+
+        <label class="field-label">Визуализация реплик диалога</label>
+        <div id="turnsPreview" class="turns-preview"></div>
+
+        <label class="field-label">JSON реплик (редактируемый)</label>
+        <textarea id="turnsJsonInput" class="json-editor mono" oninput="renderTurnsPreview()"></textarea>
+
+        <button id="extractBtn" class="btn-primary" onclick="runExtraction()">
+          <span>⚡ Извлечь и откалибровать факты</span>
+        </button>
+      </div>
+
+      <!-- Right: Extracted Facts Output -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">🎯 Извлечённые факты (case_metrics v2.1)</div>
+          <button class="toggle-btn mono" onclick="toggleRawJson()">{ } Показать Raw JSON</button>
+        </div>
+
+        <div class="kpi-strip">
+          <div class="kpi-box">
+            <div class="kpi-label">Найдено фактов</div>
+            <div id="kpiCount" class="kpi-val mono">0</div>
+          </div>
+          <div class="kpi-box">
+            <div class="kpi-label">Latency (сервер)</div>
+            <div id="kpiLatency" class="kpi-val emerald mono">—</div>
+          </div>
+          <div class="kpi-box">
+            <div class="kpi-label">Grounding Span</div>
+            <div id="kpiGrounding" class="kpi-val emerald mono">100%</div>
+          </div>
+          <div class="kpi-box">
+            <div class="kpi-label">Активный режим</div>
+            <div id="kpiMode" class="kpi-val mono" style="font-size:13px;">point2_05b</div>
+          </div>
+        </div>
+
+        <div id="factsContainer" class="facts-list"></div>
+        <pre id="rawJsonOutput" class="raw-json-out mono"></pre>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    let currentMode = 'point2_05b';
+
+    const PRESETS = [
+      {
+        call_id: "call_internet_outage_01",
+        started_at: "2026-11-15T14:30:00",
+        turns: [
+          {"idx": 0, "speaker": "operator", "text": "Здравствуйте, техподдержка МТС, чем могу помочь?"},
+          {"idx": 1, "speaker": "client", "text": "Со вчерашнего дня не работает домашний интернет, роутер перезагружал уже три раза — вообще не помогло."},
+          {"idx": 2, "speaker": "operator", "text": "Вижу обрыв на линии. Заявка принята, сейчас она уже в работе. Оформим выезд инженера на завтра."},
+          {"idx": 3, "speaker": "client", "text": "Хорошо, выезд инженера подходит, жду."}
+        ]
+      },
+      {
+        call_id: "call_tariff_switch_02",
+        started_at: "2026-11-15T18:00:00",
+        turns: [
+          {"idx": 0, "speaker": "operator", "text": "Добрый вечер! Подскажите, у вас сейчас тариф Базовый подключен?"},
+          {"idx": 1, "speaker": "client", "text": "Да нет, раньше был Базовый, а в прошлом месяце я перешёл на тариф Плюс."},
+          {"idx": 2, "speaker": "operator", "text": "Понял, также можем предложить вам пакет Ультра со скидкой."},
+          {"idx": 3, "speaker": "client", "text": "Нет, спасибо, меня текущий устраивает, только сделайте перерасчёт абонентской платы за вчерашний сбой."}
+        ]
+      },
+      {
+        call_id: "call_ticket_lifecycle_03",
+        started_at: "2026-11-15T11:15:00",
+        turns: [
+          {"idx": 0, "speaker": "client", "text": "Здравствуйте, вчера оставлял обращение, потому что на модеме горит красный индикатор и не раздает вай-фай."},
+          {"idx": 1, "speaker": "operator", "text": "Проверяю: вчера ваша заявка была принята, затем переведена в статус в работе."},
+          {"idx": 2, "speaker": "operator", "text": "Сегодня по ней назначен выезд специалиста после 14:00."},
+          {"idx": 3, "speaker": "client", "text": "Отлично, спасибо за уточнение!"}
+        ]
+      }
+    ];
+
+    function selectMode(mode) {
+      currentMode = mode;
+      ['point1_cpu', 'point2_05b', 'point3_15b'].forEach(m => {
+        document.getElementById('card-' + m).classList.toggle('active', m === mode);
+      });
+      document.getElementById('kpiMode').textContent = mode;
+    }
+
+    function loadPreset(index) {
+      const p = PRESETS[index];
+      document.getElementById('callIdInput').value = p.call_id;
+      document.getElementById('startedAtInput').value = p.started_at;
+      document.getElementById('turnsJsonInput').value = JSON.stringify(p.turns, null, 2);
+      renderTurnsPreview();
+      runExtraction();
+    }
+
+    function renderTurnsPreview() {
+      const container = document.getElementById('turnsPreview');
+      try {
+        const turns = JSON.parse(document.getElementById('turnsJsonInput').value);
+        container.innerHTML = turns.map(t => `
+          <div class="turn-bubble ${t.speaker === 'client' ? 'client' : 'operator'}">
+            <div class="turn-meta">
+              <span>#${t.idx} · ${t.speaker === 'client' ? '👤 Клиент' : '🎧 Оператор'}</span>
+            </div>
+            <div>${t.text}</div>
+          </div>
+        `).join('');
+      } catch (e) {
+        container.innerHTML = '<div style="color:#FB7185;font-size:12px;">Ошибка синтаксиса JSON в списке реплик</div>';
+      }
+    }
+
+    function toggleRawJson() {
+      const el = document.getElementById('rawJsonOutput');
+      el.style.display = (el.style.display === 'block') ? 'none' : 'block';
+    }
+
+    async function runExtraction() {
+      const btn = document.getElementById('extractBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<span>⏳ Извлечение и калибровка инвариантов...</span>';
+
+      try {
+        const turns = JSON.parse(document.getElementById('turnsJsonInput').value);
+        const payload = {
+          call_id: document.getElementById('callIdInput').value,
+          started_at: document.getElementById('startedAtInput').value,
+          turns: turns
+        };
+
+        const res = await fetch(`/extract?mode=${currentMode}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+
+        document.getElementById('kpiCount').textContent = (data.facts || []).length;
+        document.getElementById('kpiLatency').textContent = (data.latency_sec ?? 0.01) + ' s';
+        document.getElementById('rawJsonOutput').textContent = JSON.stringify(data, null, 2);
+
+        const factsContainer = document.getElementById('factsContainer');
+        if (!data.facts || data.facts.length === 0) {
+          factsContainer.innerHTML = '<div style="color:var(--text-secondary);font-size:13px;padding:12px;">Подтверждённых фактов не обнаружено.</div>';
+        } else {
+          factsContainer.innerHTML = data.facts.map(f => {
+            const attr = f.attribute || 'other';
+            const obj = f.object || {};
+            const src = f.source || {};
+            const vt = f.valid_to ? `<span style="color:#FB7185;">${f.valid_to} (закрыт)</span>` : `<span style="color:#34D399;">null (открыт / актуален)</span>`;
+            return `
+              <div class="fact-card">
+                <div class="fact-top">
+                  <span class="attr-badge attr-${attr}">${attr}</span>
+                  <span class="obj-pill mono">[${obj.type}: "${obj.name}"] · Реплика #${src.turn_idx}</span>
+                </div>
+                <div class="fact-val">${f.value}</div>
+                <div class="fact-dates mono">
+                  <span>valid_from: <strong>${f.valid_from || '—'}</strong></span>
+                  <span>valid_to: <strong>${vt}</strong></span>
+                </div>
+                <div class="fact-quote">«${src.quote || ''}» <span class="mono" style="color:var(--text-muted);font-style:normal;">span: [${(src.span || []).join(', ')}]</span></div>
+              </div>
+            `;
+          }).join('');
+        }
+      } catch (err) {
+        alert('Ошибка запроса: ' + err);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span>⚡ Извлечь и откалибровать факты</span>';
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', () => loadPreset(0));
+  </script>
+</body>
+</html>
+"""
 
 app = FastAPI(
     title="MTS MWS CompactFactExtraction API",
     description="HTTP-интерфейс компактного извлечения и калибровки фактов из транскриптов техподдержки (case_metrics v2.1)",
     version="3.0.0"
 )
+
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+def web_dashboard():
+    """Красивый интерактивный Web-интерфейс для живой демонстрации жюри."""
+    return HTML_DASHBOARD
 
 @app.get("/health")
 def health_check():
