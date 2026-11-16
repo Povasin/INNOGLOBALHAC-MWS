@@ -9,13 +9,8 @@ venv/
 .venv/
 ENV/
 
-# Jupyter Notebook checkpoints & old scratch notebooks
+# Jupyter Notebook checkpoints
 .ipynb_checkpoints/
-res_old_backup.ipynb
-resres.ipynb
-res.ipynb
-itog.ipynb
-CompactFact_Colab_Diagnostic.ipynb
 
 # Scratch & Temporary directories
 scratch/
@@ -25,24 +20,29 @@ weight/
 FINAL_COMPLIANT_SUBMISSION/
 2докер/
 
-# Intermediate exploration predictions and scripts
-pred_h*.jsonl
-pred_raw.jsonl
-pred_knn_cpu.jsonl
-pred_ensemble_v21.jsonl
-postprocess_*.py
-inspect_values.py
-explore_data.py
-knn_hybrid_cpu.py
+# Root loose files (keep repo root clean: only 5 folders + .gitignore + requirements.txt + README.md)
+/*.py
+/*.ipynb
+/*.json
+/*.jsonl
+/*.pdf
+/*.pptx
+/*.txt
+!/requirements.txt
+/Dockerfile
+/docker-compose.yml
+/.dockerignore
+/README_ready.md
+/schema.md
+/ANSWERS_v2.md
+/weights/
+/notebooks/
+/predictions/
 
 # Large Datasets and Archives
 Данные/
 Данные_v1/
 *.zip
-!01_model_and_training.zip
-!compactfact_submission_bundle.zip
-train.jsonl
-train_sft.jsonl
 
 # Model weights binaries
 *.bin
@@ -54,3 +54,4 @@ train_sft.jsonl
 .DS_Store
 Thumbs.db
 desktop.ini
+~$*

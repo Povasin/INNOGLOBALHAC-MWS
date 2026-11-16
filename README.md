@@ -27,57 +27,61 @@
 
 ---
 
-## 2. Структура проекта
+## 2. Структура репозитория (5 пунктов регламента)
 
-Репозиторий оформлен в двух взаимодополняющих форматах: для быстрой автономной работы скрипты и конфиги доступны напрямую в корне проекта, а также структурированы по каталогам 5 официальных пунктов состава сдаваемого решения:
+Структура репозитория строго разделена на 5 каталогов, соответствующих официальному перечню состава сдаваемого решения:
 
-| Каталог / Файл | Пункт состава решения | Описание |
+| Каталог | Пункт состава решения | Содержимое |
 | :--- | :--- | :--- |
-| `01_model_and_training/` | **Пункт 1** | Код обучения (train.py, seed=42), веса LoRA (weights/), инференс (inference.py), конфиги, предсказания и проверочные ноутбуки |
-| `02_docker_service/` | **Пункт 2** | Dockerfile, docker-compose.yml, app.py (FastAPI + интерактивный веб-дашборд на /), healthcheck |
-| `03_report_and_benchmarks/` и `Технический отчёт.pdf` | **Пункт 3** | Итоговый PDF-отчет, кривая Парето, замеры латентности/памяти на CPU и GPU, анализ ошибок |
-| `04_docs_and_deployment/` и `README.md` | **Пункт 4** | Исходный код, архитектура (architecture.md) и руководство по развертыванию (deployment_guide.md) |
-| `05_presentation/` | **Пункт 5** | Финальная презентация решения (.pptx) и конспект выступления |
+| [`01_model_and_training/`](01_model_and_training/) | **Пункт 1** | Воспроизводимый код обучения (`train.py`, seed=42), LoRA-веса (`weights/`), инференс (`inference.py`), конфиги, предсказания и проверочные ноутбуки |
+| [`02_docker_service/`](02_docker_service/) | **Пункт 2** | Готовый Docker-образ с FastAPI сервисом (`app.py`), интерактивным веб-дашбордом на `/`, healthcheck и автоматическими тестами |
+| [`03_report_and_benchmarks/`](03_report_and_benchmarks/) | **Пункт 3** | Итоговый PDF-отчёт (`Технический отчёт.pdf`), замеры времени/памяти на CPU и GPU, кривая Парето и глубокий анализ ошибок |
+| [`04_docs_and_deployment/`](04_docs_and_deployment/) | **Пункт 4** | Архитектурная документация (`architecture.md`) и пошаговые руководства по развёртыванию (`deployment_guide.md`) |
+| [`05_presentation/`](05_presentation/) | **Пункт 5** | Финальная презентация решения (`VIRA_защита.pptx`) и структурированный конспект выступления (`speaker_notes.md`) |
 
 ```text
 .
-├── 01_model_and_training/        # Пункт 1: Модель, обучение, инференс
-├── 02_docker_service/            # Пункт 2: Docker-образ и HTTP-сервис
-├── 03_report_and_benchmarks/     # Пункт 3: Отчет, Парето, бенчмарки
-├── 04_docs_and_deployment/       # Пункт 4: Документация и архитектура
-├── 05_presentation/              # Пункт 5: Презентация
-├── app.py                        # FastAPI сервис (REST API + веб-интерфейс на /)
-├── Dockerfile                    # Образ для запуска на CPU и GPU
-├── docker-compose.yml            # Конфигурация контейнеров (профили cpu / gpu)
-├── requirements.txt              # Зависимости
-├── prepare_dataset.py            # Конвертация train.jsonl -> train_sft.jsonl (8-польный формат)
-├── train.py                      # Скрипт QLoRA-дообучения с фиксацией сидов (seed=42)
-├── inference.py                  # Пакетный инференс на .jsonl (поддерживает все 3 точки)
-├── training_config.json          # Параметры обучения и LoRA
-├── inference_config.json         # Параметры генерации и калибровки
-├── catalog.json                  # Справочник услуг, симптомов, тарифов, действий и статусов
-├── case_metrics.py               # Скрипт расчета метрик организаторов (v2.1)
-├── weights/
-│   └── final_adapter/            # Веса и конфиг обученного LoRA-адаптера
-├── notebooks/
-│   ├── verification_and_points_check.ipynb   # Быстрая проверка метрик по 3 точкам
-│   └── training_pipeline_colab_kaggle.ipynb  # Полный пайплайн обучения для T4 GPU
-├── predictions/                  # Выгрузки на валидации и замеры ресурсов
-│   ├── pred_point1_cpu.jsonl
-│   ├── pred_point2_05b.jsonl
-│   ├── pred_point3_15b.jsonl
-│   ├── pred_final.jsonl
-│   ├── metrics_summary.json
-│   └── resource_benchmarks.json
-├── Технический отчёт.pdf         # Итоговый технический отчет
-└── 03_report_resources_quality_and_error_analysis.pdf  # Технический отчет и разбор ошибок
+├── 01_model_and_training/        # Пункт 1: Обученная модель, инференс, веса и воспроизводимость
+│   ├── train.py                  # Скрипт обучения с динамическим паддингом и фиксацией сидов (seed=42)
+│   ├── inference.py              # Пакетный инференс (точки point1_cpu, point2_05b, point3_15b)
+│   ├── prepare_dataset.py        # Конвертация train.jsonl в сжатый 8-польный формат
+│   ├── training_config.json      # Параметры QLoRA (r=16, alpha=32, target_modules)
+│   ├── inference_config.json     # Параметры генерации и калибровки
+│   ├── catalog.json              # Онтология услуг, симптомов, тарифов, действий и статусов
+│   ├── case_metrics.py           # Валидатор метрик олимпиады (v2.1)
+│   ├── weights/                  # Конфигурация и веса обученного LoRA-адаптера
+│   ├── notebooks/                # Ноутбук обучения на T4 GPU и проверочный ноутбук
+│   └── predictions/              # Предсказания по 3 точкам, метрики и бенчмарки
+├── 02_docker_service/            # Пункт 2: Docker-образ с HTTP-интерфейсом
+│   ├── Dockerfile                # Образ на python:3.11-slim для CPU и GPU
+│   ├── docker-compose.yml        # Конфигурация запуска (профили cpu / gpu)
+│   ├── app.py                    # FastAPI микросервис (POST /extract, GET /health, веб-дашборд на /)
+│   ├── test_service.py           # Тесты эндпоинтов и автоматический healthcheck
+│   ├── catalog.json              # Справочник сущностей
+│   └── requirements.txt          # Зависимости для Docker-образа
+├── 03_report_and_benchmarks/     # Пункт 3: Технический отчёт и анализ ошибок
+│   ├── Технический отчёт.pdf     # Итоговый технический отчет команды
+│   ├── 03_report_resources_quality_and_error_analysis.pdf # Расширенный инженерный отчет
+│   ├── report.md                 # Текстовая версия отчета с таблицами метрик
+│   ├── error_analysis.md         # Детальный анализ ошибок базовой модели и описание H1-H5
+│   └── pareto_curve_data.json    # Данные замеров времени инференса и памяти
+├── 04_docs_and_deployment/       # Пункт 4: Архитектура и инструкция по развертыванию
+│   ├── architecture.md           # Архитектура Two-Stage Compact Neural-Symbolic Extraction
+│   └── deployment_guide.md       # Пошаговый гайд по локальному, Docker и K8s развертыванию
+├── 05_presentation/              # Пункт 5: Презентация и материалы к защите
+│   ├── VIRA_защита.pptx          # Итоговая презентация команды VIRA
+│   ├── CompactFact_MWS_Final_Presentation.pptx # Презентация архитектуры и замеров
+│   └── speaker_notes.md          # Структурированный конспект выступления для спикера
+├── .gitignore                    # Исключения Git
+├── requirements.txt              # Корневые зависимости проекта
+└── README.md                     # Главная страница документации
 ```
 
 ---
 
 ## 3. Архитектура постпроцессинга и калибровки (H1–H5)
 
-При анализе ошибок базовой модели на `val.jsonl` выяснилось, что основные штрафы в `case_metrics.py` приходят не из-за пропуска сущностей, а из-за мелких расхождений с каталогом и нарушения логики дат (`valid_from` / `valid_to`). В `inference.py` и `app.py` зашиты пять детерминированных правок:
+При анализе ошибок базовой модели на `val.jsonl` выяснилось, что основные штрафы в `case_metrics.py` приходят не из-за пропуска сущностей, а из-за мелких расхождений с каталогом и нарушения логики дат (`valid_from` / `valid_to`). В `01_model_and_training/inference.py` и `02_docker_service/app.py` зашиты пять детерминированных правок:
 
 1. **Нормализация ASR и маппинг на каталог (H1):**
    Замена `Wi-Fi` / `wifi` на `вай-фай` (как в эталоне), очистка мусорных префиксов (`неисправность:`, `самодиагностика:`) и дотягивание значений до ближайшего кандидата из `catalog.json` по `SequenceMatcher` (порог 0.40–0.50).
@@ -89,42 +93,49 @@
    * Статусы сортируются по рангу: `принята (0)` -> `в работе (1)` -> `назначен выезд специалиста (2)` -> `выполнена (3)`. Промежуточные статусы закрываются датой следующего статуса (`valid_to = next_valid_from`), а финальный статус остается открытым (`valid_to = None`) и получает время `T23:59:59`, чтобы в `state_accuracy` он гарантированно считался последним за день.
    * Если в звонке обсуждаются старый и новый тарифы, старый закрывается датой перехода, а текущий остается единственным с `valid_to = None`.
 5. **Выравнивание спанов цитирования (H5):**
-   Вместо генерации символьных индексов нейросетью (где LLM постоянно ошибается в подсчете символов), функция `find_best_span_in_turn` ищет токены объекта и значения прямо в тексте реплики `turn_idx` и формирует точную вырезку `quote` и `span`. Это дает `grounding_span = 1.0000`.
+   Вместо генерации символьных индексов нейросетью (где LLM постоянно ошибается в подсчете символов), функция `find_best_span_in_turn` ищет токены объекта и значения прямо в тексте реплики `turn_idx` и формирует честную вырезку `quote` и `span`. Это обеспечивает точность цитирования `grounding_span = 0.9697 - 1.0000`.
 
 ---
 
 ## 4. Запуск через Docker (HTTP-сервис)
 
-Контейнер поднимает `FastAPI` на порту `8000`. На корневом маршруте `GET /` доступен веб-интерфейс для интерактивного тестирования на пресетах и своих диалогах, на `GET /docs` — стандартный Swagger.
+Контейнер поднимает `FastAPI` на порту `8000`. На корневом маршруте `GET /` доступен веб-интерфейс для интерактивного тестирования на пресетах и своих диалогах, на `GET /docs` — Swagger UI.
 
 ### Сборка и запуск
 
 ```bash
-# Сборка образа
+# Переход в каталог сервиса
+cd 02_docker_service
+
+# Сборка Docker-образа
 docker build -t mws-fact-extractor:v3.0 .
 
-# Вариант 1: запуск на чистом CPU (Point 1)
+# Вариант 1: запуск на чистом CPU (Point 1, задержка ~0.05 с/звонок)
 docker run -d -p 8000:8000 -e INFERENCE_MODE=point1_cpu --name mws_extractor mws-fact-extractor:v3.0
 
 # Вариант 2: запуск на GPU (Point 2 Qwen-0.5B по умолчанию)
 docker run -d --gpus all -p 8000:8000 -e INFERENCE_MODE=point2_05b --name mws_extractor mws-fact-extractor:v3.0
 ```
 
-Либо через `docker-compose`:
+Либо через Docker Compose:
 ```bash
+cd 02_docker_service
+
+# CPU-режим:
 docker-compose up -d fact-extractor-cpu
-# или для GPU:
+
+# GPU-режим:
 docker-compose --profile gpu up -d fact-extractor-gpu
 ```
 
-### Примеры запросов к API
+### Примеры вызова API
 
-Проверка состояния сервиса:
+Проверка работоспособности сервиса:
 ```bash
 curl http://localhost:8000/health
 ```
 
-Извлечение фактов из одного звонка (`POST /extract`). Режим работы можно передать в query-параметре `mode` (`point1_cpu`, `point2_05b`, `point3_15b`):
+Извлечение фактов из звонка (`POST /extract`). Выбор точки Парето задается параметром `mode`:
 ```bash
 curl -X POST "http://localhost:8000/extract?mode=point2_05b" \
      -H "Content-Type: application/json" \
@@ -140,13 +151,14 @@ curl -X POST "http://localhost:8000/extract?mode=point2_05b" \
      }'
 ```
 
-Пакетная обработка списка звонков доступна на эндпоинте `POST /extract_batch` (принимает `{"calls": [...]}`). Если контейнер запущен в окружении без GPU или весов, сервис автоматически переключится на `point1_cpu` без падения с 500-й ошибкой.
+Пакетная обработка звонков: эндпоинт `POST /extract_batch` (принимает `{"calls": [...]}`).
 
 ---
 
 ## 5. Локальный запуск обучения и инференса
 
-### Установка зависимостей
+### Установка окружения
+
 ```bash
 python -m venv .venv
 source .venv/bin/activate  # На Windows: .venv\Scripts\activate
@@ -154,19 +166,19 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### Шаг 1. Подготовка датасета
-Скрипт читает `train.jsonl` и сохраняет `train_sft.jsonl` в формате ChatML с компактными 8-польными массивами:
+### Шаг 1. Подготовка компактного датасета
+Скрипт читает `train.jsonl` и упаковывает факты в плоские 8-элементные кортежи в формате ChatML:
 ```bash
-python prepare_dataset.py
+python 01_model_and_training/prepare_dataset.py
 ```
 
 ### Шаг 2. Обучение модели (`train.py`)
-В скрипте зафиксированы сиды (`PYTHONHASHSEED`, `random`, `numpy`, `torch`, `transformers` — `seed=42`). Токены системного промпта и реплик диалога маскируются значением `-100`, чтобы лосс считался только по ответам ассистента. Паддинг динамический (по максимальной длине внутри батча), включен `gradient_checkpointing`, поэтому обучение помещается в 4 ГБ VRAM:
+В скрипте зафиксированы сиды (`seed=42`), токены системного промпта и реплик диалога маскируются значением `-100`, лосс считается только по ответам ассистента. Паддинг динамический, включен `gradient_checkpointing` (потребление до 4 ГБ VRAM):
 ```bash
-python train.py \
+python 01_model_and_training/train.py \
   --model_id "Qwen/Qwen2.5-0.5B-Instruct" \
   --train_file "train_sft.jsonl" \
-  --output_dir "./weights" \
+  --output_dir "01_model_and_training/weights" \
   --seed 42 \
   --max_steps 350 \
   --batch_size 1 \
@@ -174,17 +186,20 @@ python train.py \
 ```
 
 ### Шаг 3. Пакетный инференс (`inference.py`)
-Скрипт принимает входной `.jsonl` (как сырые диалоги без поля `facts` со скрытого теста, так и предрасчитанные файлы для калибровки) и записывает результат в формате схемы `case_metrics v2.1`:
+Скрипт принимает входной `.jsonl` со скрытого теста и сохраняет валидные факты в строгой схеме `case_metrics v2.1`:
 ```bash
-# Точка 1 (CPU Fast):
-python inference.py --input val.jsonl --output pred_point1_cpu.jsonl --mode point1_cpu
+# Точка 1 (CPU Fast, без GPU):
+python 01_model_and_training/inference.py --input val.jsonl --output pred_point1_cpu.jsonl --mode point1_cpu
 
 # Точка 2 (Qwen 0.5B + LoRA):
-python inference.py --input val.jsonl --output pred_point2_05b.jsonl --mode point2_05b --weights ./weights/final_adapter
+python 01_model_and_training/inference.py --input val.jsonl --output pred_point2_05b.jsonl --mode point2_05b --weights 01_model_and_training/weights
 
 # Точка 3 (Vikhr 1.5B + LoRA):
-python inference.py --input val.jsonl --output pred_point3_15b.jsonl --mode point3_15b --weights ./weights/final_adapter
+python 01_model_and_training/inference.py --input val.jsonl --output pred_point3_15b.jsonl --mode point3_15b --weights 01_model_and_training/weights
 ```
 
-### Шаг 4. Подсчет метрик
-Для быстрой сверки всех трех точек и генерации архива сабмита можно запустить проверочный ноутбук `notebooks/verification_and_points_check.ipynb` (выполняется ~30 секунд на CPU) либо вызвать `case_metrics.py` напрямую.
+### Шаг 4. Проверка воспроизводимости и метрик
+Для моментальной проверки метрик по всем 3 точкам выполните ноутбук `01_model_and_training/notebooks/verification_and_points_check.ipynb` (время прогона ~30 секунд на CPU) либо запустите официальный валидатор:
+```bash
+python 01_model_and_training/case_metrics.py --gold val.jsonl --pred pred_point2_05b.jsonl
+```
