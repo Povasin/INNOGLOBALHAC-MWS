@@ -43,6 +43,7 @@ FINAL_COMPLIANT_SUBMISSION/
 Данные/
 Данные_v1/
 *.zip
+!kaggle_train_pack.zip
 
 # Model weights binaries (ignore heavy base models, allow compact LoRA adapters)
 *.bin
